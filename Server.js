@@ -1,14 +1,9 @@
-import express from "express";
-import cors from "cors";
-import path from "path";
-import { fileURLToPath } from "url";
+const express = require("express");
+const cors = require("cors");
+const path = require("path");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
-
-// Fix for ES module path
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 // Middleware
 app.use(cors());
@@ -20,7 +15,7 @@ app.get("/health", (req, res) => {
   res.json({ status: "LIPA SERVER RUNNING ✅" });
 });
 
-// Example payment endpoint (future API hook)
+// Payment simulation endpoint
 app.post("/api/payment", (req, res) => {
   const { amount, currency, method } = req.body;
 
@@ -33,7 +28,7 @@ app.post("/api/payment", (req, res) => {
   });
 });
 
-// Serve your HTML
+// Serve frontend
 app.get("*", (req, res) => {
   res.sendFile(path.join(__dirname, "public", "index.html"));
 });
