@@ -1,39 +1,39 @@
 const express = require("express");
-const cors = require("cors");
 const path = require("path");
+const bodyParser = require("body-parser");
+const cors = require("cors");
 
 const app = express();
 const PORT = process.env.PORT || 3000;
 
-// Middleware
 app.use(cors());
-app.use(express.json());
-app.use(express.static("public"));
+app.use(bodyParser.json());
+app.use(express.static(path.join(__dirname, "public")));
 
-// Health check
-app.get("/health", (req, res) => {
-  res.json({ status: "LIPA SERVER RUNNING ✅" });
+// Routes
+app.get("/", (req, res) => {
+  res.sendFile(path.join(__dirname, "public/index.html"));
 });
 
-// Payment simulation endpoint
+// Simulated API for payment initiation
 app.post("/api/payment", (req, res) => {
-  const { amount, currency, method } = req.body;
+  const { amount, currency, method, merchant } = req.body;
+  if (!amount || !currency || !method || !merchant)
+    return res.status(400).json({ error: "Missing parameters" });
 
-  console.log("Payment Request:", amount, currency, method);
-
-  res.json({
-    success: true,
-    message: "Payment accepted (simulation)",
-    reference: "LIPA-" + Math.random().toString(36).substring(2, 10).toUpperCase()
-  });
+  const ref = "REF-" + Math.random().toString(36).substr(2, 8).toUpperCase();
+  res.json({ status: "success", ref, amount, currency, method, merchant });
 });
 
-// Serve frontend
-app.get("*", (req, res) => {
-  res.sendFile(path.join(__dirname, "public", "index.html"));
+// Simulated withdrawal API
+app.post("/api/withdraw", (req, res) => {
+  const { amount, wallet, pin } = req.body;
+  if (!amount || !wallet || !pin)
+    return res.status(400).json({ error: "Missing parameters" });
+
+  if (pin !== "1234") return res.status(403).json({ error: "Invalid PIN" });
+
+  res.json({ status: "success", wallet, amount });
 });
 
-// Start server
-app.listen(PORT, () => {
-  console.log(`🚀 LIPA running on port ${PORT}`);
-});
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
