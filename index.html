@@ -8,6 +8,7 @@
     <script src="https://cdn.tailwindcss.com"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/luxon@3/build/global/luxon.min.js"></script>
+    <script src="/socket.io/socket.io.js"></script>
 
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap');
@@ -70,20 +71,19 @@
 </head>
 <body class="pb-12">
 
-    <!-- HEADER -->
     <header class="glass sticky top-0 z-50 border-b border-white/10">
         <div class="max-w-7xl mx-auto px-6 py-6 flex justify-between items-center">
             <div class="flex items-center gap-4">
                 <h1 class="text-5xl font-black bg-gradient-to-r from-cyan-400 via-blue-400 to-emerald-400 bg-clip-text text-transparent">
                     VoiceMeter
                 </h1>
-                <span class="px-3 py-1 text-xs font-mono bg-cyan-500/20 text-cyan-400 rounded-full">PARLIAMENT v2.2 • Voice Enabled</span>
+                <span class="px-3 py-1 text-xs font-mono bg-cyan-500/20 text-cyan-400 rounded-full">PARLIAMENT v2.2 • LIVE SYNC</span>
             </div>
             
             <div class="flex items-center gap-6">
                 <div class="flex items-center gap-2 bg-emerald-500/10 px-5 py-2 rounded-3xl">
                     <div class="w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></div>
-                    <span class="font-semibold text-emerald-400">LIVE SESSION • 214 MPs Online</span>
+                    <span class="font-semibold text-emerald-400">LIVE SESSION • <span id="onlineCount">214</span> MPs Online</span>
                 </div>
                 <button onclick="exportResults()" 
                         class="px-6 py-3 bg-white/10 hover:bg-white/20 rounded-2xl font-medium flex items-center gap-2 transition">
@@ -95,7 +95,6 @@
 
     <main class="max-w-7xl mx-auto px-6 py-10">
 
-        <!-- MOTION -->
         <section class="glass rounded-3xl p-10 mb-10 glow-cyan">
             <h2 class="text-6xl font-black mb-4 tracking-tighter">
                 National Infrastructure Bill 2026
@@ -113,18 +112,16 @@
 
         <div class="grid lg:grid-cols-12 gap-8">
 
-            <!-- VOTING PANEL -->
             <div class="lg:col-span-5 glass rounded-3xl p-10">
                 <h3 class="text-3xl font-bold mb-6">Cast Your Vote</h3>
                 
-                <!-- Voice to Vote -->
                 <div class="mb-8 p-6 bg-slate-900/70 rounded-3xl border border-cyan-500/30">
                     <div class="flex items-center justify-between mb-4">
                         <div class="flex items-center gap-3">
                             <span class="text-3xl">🎤</span>
                             <div>
                                 <p class="font-semibold text-lg">Voice to Vote</p>
-                                <p class="text-sm text-slate-400">Say: "Yes", "No", or "Abstain"</p>
+                                <p class="text-sm text-slate-400">Say: "Aye", "Nay", or "Abstain"</p>
                             </div>
                         </div>
                         <button id="voiceButton"
@@ -151,15 +148,15 @@
                 </div>
 
                 <div class="grid grid-cols-3 gap-5">
-                    <button onclick="castVote('YES')" 
+                    <button id="btnYes" onclick="castVote('YES')" 
                             class="vote-card col-span-1 bg-gradient-to-br from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-black font-black py-12 rounded-3xl text-3xl shadow-xl">
                         YES
                     </button>
-                    <button onclick="castVote('NO')" 
+                    <button id="btnNo" onclick="castVote('NO')" 
                             class="vote-card col-span-1 bg-gradient-to-br from-red-500 to-rose-600 hover:from-red-400 hover:to-rose-500 font-black py-12 rounded-3xl text-3xl shadow-xl">
                         NO
                     </button>
-                    <button onclick="castVote('ABSTAIN')" 
+                    <button id="btnAbs" onclick="castVote('ABSTAIN')" 
                             class="vote-card col-span-1 bg-gradient-to-br from-yellow-500 to-amber-600 hover:from-yellow-400 hover:to-amber-500 text-black font-black py-12 rounded-3xl text-3xl shadow-xl">
                         ABSTAIN
                     </button>
@@ -172,7 +169,6 @@
                 </div>
             </div>
 
-            <!-- LIVE RESULTS -->
             <div class="lg:col-span-7 glass rounded-3xl p-10">
                 <h3 class="text-3xl font-bold mb-8">Live Results</h3>
                 
@@ -198,7 +194,6 @@
             </div>
         </div>
 
-        <!-- CONFIDENCE METER -->
         <section class="glass rounded-3xl p-10 mt-8">
             <div class="flex justify-between items-end mb-6">
                 <h3 class="text-3xl font-bold">Weighted Parliamentary Confidence</h3>
@@ -215,7 +210,6 @@
             <p class="mt-4 text-slate-400">Calculated using voting intensity from all participating Members of Parliament</p>
         </section>
 
-        <!-- VOTE LEDGER -->
         <section class="glass rounded-3xl p-10 mt-8">
             <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
                 <h3 class="text-3xl font-bold">Transparent Vote Ledger</h3>
@@ -227,24 +221,60 @@
             </div>
 
             <div id="ledger" class="space-y-4 max-h-[520px] overflow-y-auto custom-scroll pr-4">
-                <!-- JS populated -->
-            </div>
+                </div>
         </section>
     </main>
 
     <script>
-        // ====================== DATA ======================
+        // ====================== SOCKET & DATA ======================
+        const socket = (typeof io !== 'undefined') ? io() : null;
         let votes = { YES: [], NO: [], ABSTAIN: [] };
         let ledgerEntries = [];
         let hasVoted = false;
 
-        // Voice Recognition
+        // Voice Recognition state
         let recognition = null;
         let isListening = false;
-
-        // ====================== CHART ======================
         let chartInstance;
 
+        // ====================== INITIALIZE ======================
+        window.onload = () => {
+            initChart();
+            setupSocketListeners();
+
+            // Slider update
+            const slider = document.getElementById('intensity');
+            const label = document.getElementById('intensityLabel');
+            slider.addEventListener('input', () => { label.textContent = slider.value; });
+
+            // Initialize voice
+            recognition = initVoiceRecognition();
+        };
+
+        function setupSocketListeners() {
+            if (!socket) return;
+
+            socket.on('init_state', (state) => {
+                votes = state.votes;
+                ledgerEntries = state.ledger;
+                document.getElementById('ledger').innerHTML = '';
+                ledgerEntries.forEach(v => addLedgerEntry(v));
+                updateDashboard();
+            });
+
+            socket.on('vote_update', (data) => {
+                votes = data.fullState.votes;
+                ledgerEntries = data.fullState.ledger;
+                addLedgerEntry(data.newVote);
+                updateDashboard();
+            });
+            
+            socket.on('mp_count', (count) => {
+                document.getElementById('onlineCount').textContent = count;
+            });
+        }
+
+        // ====================== CHART ======================
         function initChart() {
             const ctx = document.getElementById('voteChart').getContext('2d');
             chartInstance = new Chart(ctx, {
@@ -266,11 +296,7 @@
                     plugins: {
                         legend: {
                             position: 'bottom',
-                            labels: {
-                                color: '#e2e8f0',
-                                font: { size: 16, weight: '500' },
-                                padding: 30
-                            }
+                            labels: { color: '#e2e8f0', font: { size: 16, weight: '500' }, padding: 30 }
                         }
                     }
                 }
@@ -279,14 +305,10 @@
 
         // ====================== VOICE RECOGNITION ======================
         function initVoiceRecognition() {
-            if (!('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
-                alert("Voice recognition is not supported in your browser. Please use Chrome, Edge, or another compatible browser.");
-                return null;
-            }
+            if (!('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) return null;
 
             const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
             const recog = new SpeechRecognition();
-            
             recog.continuous = false;
             recog.interimResults = false;
             recog.lang = 'en-US';
@@ -296,20 +318,10 @@
                 document.getElementById('voiceButton').classList.add('listening');
                 document.getElementById('voiceStatus').textContent = 'Listening...';
                 document.getElementById('voiceIcon').textContent = '🔴';
-                document.getElementById('voiceFeedback').textContent = 'Speak now: "Yes", "No", or "Abstain"';
+                document.getElementById('voiceFeedback').textContent = 'Speak: "Aye", "Nay", or "Abstain"';
             };
 
             recog.onend = () => {
-                isListening = false;
-                document.getElementById('voiceButton').classList.remove('listening');
-                document.getElementById('voiceStatus').textContent = 'Start Listening';
-                document.getElementById('voiceIcon').textContent = '🎤';
-                document.getElementById('voiceFeedback').textContent = '';
-            };
-
-            recog.onerror = (event) => {
-                console.error('Speech recognition error:', event);
-                document.getElementById('voiceFeedback').textContent = 'Error: ' + event.error;
                 isListening = false;
                 document.getElementById('voiceButton').classList.remove('listening');
                 document.getElementById('voiceStatus').textContent = 'Start Listening';
@@ -318,24 +330,25 @@
 
             recog.onresult = (event) => {
                 const transcript = event.results[0][0].transcript.trim().toLowerCase();
-                document.getElementById('voiceFeedback').textContent = `Heard: "${transcript}"`;
-
-                let choice = null;
-
-                if (transcript.includes('yes')) {
-                    choice = 'YES';
-                } else if (transcript.includes('no')) {
-                    choice = 'NO';
-                } else if (transcript.includes('abstain') || transcript.includes('abstaining')) {
-                    choice = 'ABSTAIN';
+                const confidence = event.results[0][0].confidence;
+                
+                if (confidence < 0.4) {
+                    document.getElementById('voiceFeedback').textContent = "Unclear. Try again.";
+                    return;
                 }
 
-                if (choice) {
-                    setTimeout(() => {
-                        castVote(choice, true); // true = from voice
-                    }, 800);
+                const map = {
+                    'yes': 'YES', 'aye': 'YES', 'support': 'YES',
+                    'no': 'NO', 'nay': 'NO', 'against': 'NO',
+                    'abstain': 'ABSTAIN', 'present': 'ABSTAIN'
+                };
+
+                const match = Object.keys(map).find(k => transcript.includes(k));
+                if (match) {
+                    document.getElementById('voiceFeedback').textContent = `Matched: ${map[match]}`;
+                    setTimeout(() => castVote(map[match], true), 800);
                 } else {
-                    document.getElementById('voiceFeedback').textContent = `Could not understand. Try saying "Yes", "No", or "Abstain".`;
+                    document.getElementById('voiceFeedback').textContent = `Heard "${transcript}". Try Yes/No/Abstain.`;
                 }
             };
 
@@ -343,32 +356,18 @@
         }
 
         function toggleVoiceRecognition() {
-            if (!recognition) {
-                recognition = initVoiceRecognition();
-                if (!recognition) return;
-            }
-
-            if (isListening) {
-                recognition.stop();
-            } else {
-                try {
-                    recognition.start();
-                } catch (e) {
-                    console.error(e);
-                    alert("Could not start voice recognition. Please try again.");
-                }
-            }
+            if (!recognition) return alert("Speech API not supported.");
+            isListening ? recognition.stop() : recognition.start();
         }
 
         // ====================== VOTING ======================
         function castVote(choice, fromVoice = false) {
             if (hasVoted) {
-                if (!fromVoice) alert("You have already cast your vote in this session.");
+                if (!fromVoice) alert("Vote already cast for this session.");
                 return;
             }
 
             const intensity = parseInt(document.getElementById('intensity').value);
-
             const vote = {
                 id: crypto.randomUUID(),
                 voter: "Hon. Gillian Jakes",
@@ -377,24 +376,36 @@
                 choice: choice,
                 intensity: intensity,
                 timestamp: luxon.DateTime.now().toFormat('HH:mm:ss'),
-                weight: intensity,
                 method: fromVoice ? 'voice' : 'manual'
             };
 
-            votes[choice].push(vote);
-            ledgerEntries.unshift(vote);
+            // Emit to server if available, otherwise update locally for fallback
+            if (socket) {
+                socket.emit('cast_vote', vote);
+            } else {
+                votes[choice].push(vote);
+                ledgerEntries.unshift(vote);
+                addLedgerEntry(vote);
+                updateDashboard();
+            }
+
             hasVoted = true;
-
-            updateDashboard();
-            addLedgerEntry(vote);
-
+            disableVoteButtons();
             if (choice === 'YES') confettiBurst();
 
-            // Feedback for voice users
             if (fromVoice) {
                 document.getElementById('voiceFeedback').innerHTML = 
-                    `<span class="text-emerald-400">✓ Vote cast: ${choice} (${intensity}% intensity)</span>`;
+                    `<span class="text-emerald-400">✓ Vote cast: ${choice}</span>`;
             }
+        }
+
+        function disableVoteButtons() {
+            ['btnYes', 'btnNo', 'btnAbs'].forEach(id => {
+                const btn = document.getElementById(id);
+                btn.style.opacity = '0.5';
+                btn.style.cursor = 'not-allowed';
+                btn.onclick = null;
+            });
         }
 
         function updateDashboard() {
@@ -427,10 +438,13 @@
         function addLedgerEntry(vote) {
             const ledger = document.getElementById('ledger');
             const color = vote.choice === 'YES' ? 'emerald' : vote.choice === 'NO' ? 'red' : 'amber';
+            
+            // Check if entry already exists (for sync safety)
+            if (document.getElementById(`v-${vote.id}`)) return;
 
             const div = document.createElement('div');
+            div.id = `v-${vote.id}`;
             div.className = `ledger-entry p-6 rounded-3xl bg-slate-900 border border-${color}-500/30 flex items-center justify-between`;
-
             div.innerHTML = `
                 <div class="flex items-center gap-5">
                     <div class="w-14 h-14 rounded-2xl bg-${color}-500/10 flex items-center justify-center text-4xl">
@@ -445,101 +459,47 @@
                 <div class="text-right">
                     <div class="text-4xl font-black">${vote.intensity}<span class="text-xl">%</span></div>
                     <div class="text-sm text-slate-400">${vote.timestamp}</div>
-                </div>
-            `;
-
+                </div>`;
             ledger.prepend(div);
         }
 
-        // ====================== FILTER ======================
         function filterLedger() {
             const term = document.getElementById('searchInput').value.toLowerCase().trim();
-            const entries = document.querySelectorAll('.ledger-entry');
-
-            entries.forEach(entry => {
-                const text = entry.textContent.toLowerCase();
-                entry.style.display = text.includes(term) ? 'flex' : 'none';
+            document.querySelectorAll('.ledger-entry').forEach(entry => {
+                entry.style.display = entry.textContent.toLowerCase().includes(term) ? 'flex' : 'none';
             });
         }
 
-        // ====================== EXPORT ======================
         function exportResults() {
             const dataStr = JSON.stringify({
                 motion: "National Infrastructure Bill 2026",
                 date: new Date().toISOString(),
-                totalVotes: ledgerEntries.length,
-                summary: {
-                    YES: votes.YES.length,
-                    NO: votes.NO.length,
-                    ABSTAIN: votes.ABSTAIN.length
-                },
-                weighted: {
-                    YES: votes.YES.reduce((s, v) => s + v.intensity, 0),
-                    NO: votes.NO.reduce((s, v) => s + v.intensity, 0),
-                    ABSTAIN: votes.ABSTAIN.reduce((s, v) => s + v.intensity, 0)
-                },
                 allVotes: ledgerEntries
             }, null, 2);
-
             const blob = new Blob([dataStr], { type: 'application/json' });
             const url = URL.createObjectURL(blob);
             const a = document.createElement('a');
             a.href = url;
             a.download = `VoiceMeter_Results_${luxon.DateTime.now().toFormat('yyyy-MM-dd_HH-mm')}.json`;
             a.click();
-            URL.revokeObjectURL(url);
         }
 
-        // ====================== CONFETTI ======================
         function confettiBurst() {
-            for (let i = 0; i < 80; i++) {
+            for (let i = 0; i < 60; i++) {
                 setTimeout(() => {
                     const c = document.createElement('div');
                     c.textContent = ['🟢','💚','✅','🏆'][Math.floor(Math.random()*4)];
-                    c.style.position = 'fixed';
-                    c.style.left = Math.random() * 100 + 'vw';
-                    c.style.top = '-50px';
-                    c.style.fontSize = '28px';
-                    c.style.zIndex = '9999';
-                    c.style.pointerEvents = 'none';
+                    c.style.cssText = `position:fixed; left:${Math.random()*100}vw; top:-50px; font-size:24px; z-index:9999; pointer-events:none;`;
                     document.body.appendChild(c);
-
                     let posY = -50;
-                    const speed = Math.random() * 12 + 10;
-
                     const fall = setInterval(() => {
-                        posY += speed;
+                        posY += 10;
                         c.style.top = posY + 'px';
-                        c.style.transform = `rotate(${posY * 3}deg)`;
-
-                        if (posY > window.innerHeight + 50) {
-                            clearInterval(fall);
-                            c.remove();
-                        }
+                        if (posY > window.innerHeight) { clearInterval(fall); c.remove(); }
                     }, 25);
-                }, i * 6);
+                }, i * 10);
             }
         }
-
-        // ====================== INITIALIZE ======================
-        window.onload = () => {
-            initChart();
-
-            // Live slider label
-            const slider = document.getElementById('intensity');
-            const label = document.getElementById('intensityLabel');
-            slider.addEventListener('input', () => {
-                label.textContent = slider.value;
-            });
-
-            // Demo votes
-            setTimeout(() => { castVote('YES'); }, 800);
-            setTimeout(() => { castVote('NO'); }, 1600);
-            setTimeout(() => { castVote('YES'); }, 2400);
-
-            // Initialize voice (but don't start it)
-            recognition = initVoiceRecognition();
-        };
     </script>
 </body>
 </html>
