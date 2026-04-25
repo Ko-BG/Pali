@@ -1,0 +1,545 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>VoiceMeter • Live Parliament</title>
+    
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/luxon@3/build/global/luxon.min.js"></script>
+
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;900&display=swap');
+        
+        body {
+            font-family: 'Inter', system-ui, sans-serif;
+            background: linear-gradient(135deg, #020617 0%, #0f172a 100%);
+            color: white;
+            min-height: 100vh;
+        }
+
+        .glass {
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(24px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+        }
+
+        .glow-cyan { box-shadow: 0 0 35px rgba(34, 211, 238, 0.45); }
+
+        .vote-card {
+            transition: all 0.4s cubic-bezier(0.4, 0.0, 0.2, 1);
+        }
+        .vote-card:hover {
+            transform: translateY(-10px) scale(1.05);
+            box-shadow: 0 25px 50px -12px rgb(0 0 0 / 0.4);
+        }
+
+        .ledger-entry {
+            animation: slideIn 0.5s ease-out forwards;
+        }
+
+        @keyframes slideIn {
+            from { opacity: 0; transform: translateX(-30px); }
+            to { opacity: 1; transform: translateX(0); }
+        }
+
+        .custom-scroll::-webkit-scrollbar {
+            width: 6px;
+        }
+        .custom-scroll::-webkit-scrollbar-thumb {
+            background: rgba(103, 232, 249, 0.3);
+            border-radius: 20px;
+        }
+
+        .voice-btn {
+            transition: all 0.3s ease;
+        }
+        .voice-btn.listening {
+            animation: pulse 1.5s infinite;
+            background-color: #22d3ee !important;
+            color: #0f172a !important;
+            box-shadow: 0 0 30px #67e8f9;
+        }
+
+        @keyframes pulse {
+            0%, 100% { opacity: 1; }
+            50% { opacity: 0.7; }
+        }
+    </style>
+</head>
+<body class="pb-12">
+
+    <!-- HEADER -->
+    <header class="glass sticky top-0 z-50 border-b border-white/10">
+        <div class="max-w-7xl mx-auto px-6 py-6 flex justify-between items-center">
+            <div class="flex items-center gap-4">
+                <h1 class="text-5xl font-black bg-gradient-to-r from-cyan-400 via-blue-400 to-emerald-400 bg-clip-text text-transparent">
+                    VoiceMeter
+                </h1>
+                <span class="px-3 py-1 text-xs font-mono bg-cyan-500/20 text-cyan-400 rounded-full">PARLIAMENT v2.2 • Voice Enabled</span>
+            </div>
+            
+            <div class="flex items-center gap-6">
+                <div class="flex items-center gap-2 bg-emerald-500/10 px-5 py-2 rounded-3xl">
+                    <div class="w-3 h-3 bg-emerald-500 rounded-full animate-pulse"></div>
+                    <span class="font-semibold text-emerald-400">LIVE SESSION • 214 MPs Online</span>
+                </div>
+                <button onclick="exportResults()" 
+                        class="px-6 py-3 bg-white/10 hover:bg-white/20 rounded-2xl font-medium flex items-center gap-2 transition">
+                    <span>📤</span> Export Results
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-6 py-10">
+
+        <!-- MOTION -->
+        <section class="glass rounded-3xl p-10 mb-10 glow-cyan">
+            <h2 class="text-6xl font-black mb-4 tracking-tighter">
+                National Infrastructure Bill 2026
+            </h2>
+            <p class="text-2xl text-slate-300 max-w-4xl">
+                Allocation of <span class="text-cyan-400 font-semibold">$5.4 Billion</span> for national transportation networks, 
+                digital infrastructure, and smart county development projects.
+            </p>
+            <div class="mt-6 flex flex-wrap gap-4">
+                <span class="bg-white/10 px-5 py-2 rounded-full text-sm">🏛️ Motion No. 47/2026</span>
+                <span class="bg-white/10 px-5 py-2 rounded-full text-sm">📍 Parliament of Kenya</span>
+                <span class="bg-white/10 px-5 py-2 rounded-full text-sm">🗓️ April 25, 2026</span>
+            </div>
+        </section>
+
+        <div class="grid lg:grid-cols-12 gap-8">
+
+            <!-- VOTING PANEL -->
+            <div class="lg:col-span-5 glass rounded-3xl p-10">
+                <h3 class="text-3xl font-bold mb-6">Cast Your Vote</h3>
+                
+                <!-- Voice to Vote -->
+                <div class="mb-8 p-6 bg-slate-900/70 rounded-3xl border border-cyan-500/30">
+                    <div class="flex items-center justify-between mb-4">
+                        <div class="flex items-center gap-3">
+                            <span class="text-3xl">🎤</span>
+                            <div>
+                                <p class="font-semibold text-lg">Voice to Vote</p>
+                                <p class="text-sm text-slate-400">Say: "Yes", "No", or "Abstain"</p>
+                            </div>
+                        </div>
+                        <button id="voiceButton"
+                                onclick="toggleVoiceRecognition()"
+                                class="voice-btn px-8 py-4 bg-cyan-500 hover:bg-cyan-400 text-black font-bold rounded-2xl flex items-center gap-3 text-lg">
+                            <span id="voiceIcon">🎤</span>
+                            <span id="voiceStatus">Start Listening</span>
+                        </button>
+                    </div>
+                    <div id="voiceFeedback" class="text-center text-sm text-slate-400 min-h-[1.5rem]"></div>
+                </div>
+
+                <div class="mb-10">
+                    <div class="flex justify-between items-center mb-3">
+                        <label class="text-xl font-medium">Voting Intensity (Conviction)</label>
+                        <span id="intensityLabel" class="text-5xl font-black text-cyan-400">65</span>
+                    </div>
+                    <input type="range" id="intensity" min="10" max="100" value="65" step="5"
+                           class="w-full accent-cyan-400 cursor-pointer">
+                    <div class="flex justify-between text-xs text-slate-400 mt-2">
+                        <span>Minimal Support</span>
+                        <span>Full Conviction</span>
+                    </div>
+                </div>
+
+                <div class="grid grid-cols-3 gap-5">
+                    <button onclick="castVote('YES')" 
+                            class="vote-card col-span-1 bg-gradient-to-br from-green-500 to-emerald-600 hover:from-green-400 hover:to-emerald-500 text-black font-black py-12 rounded-3xl text-3xl shadow-xl">
+                        YES
+                    </button>
+                    <button onclick="castVote('NO')" 
+                            class="vote-card col-span-1 bg-gradient-to-br from-red-500 to-rose-600 hover:from-red-400 hover:to-rose-500 font-black py-12 rounded-3xl text-3xl shadow-xl">
+                        NO
+                    </button>
+                    <button onclick="castVote('ABSTAIN')" 
+                            class="vote-card col-span-1 bg-gradient-to-br from-yellow-500 to-amber-600 hover:from-yellow-400 hover:to-amber-500 text-black font-black py-12 rounded-3xl text-3xl shadow-xl">
+                        ABSTAIN
+                    </button>
+                </div>
+
+                <div class="mt-10 p-5 bg-slate-900/50 rounded-2xl text-center">
+                    <p class="text-slate-400 text-sm">Voting as</p>
+                    <p class="font-semibold text-xl">Hon. Gillian Jakes</p>
+                    <p class="text-cyan-400 text-sm">Nairobi County • Independent</p>
+                </div>
+            </div>
+
+            <!-- LIVE RESULTS -->
+            <div class="lg:col-span-7 glass rounded-3xl p-10">
+                <h3 class="text-3xl font-bold mb-8">Live Results</h3>
+                
+                <div class="grid grid-cols-3 gap-8 mb-12">
+                    <div class="text-center">
+                        <p id="yesCount" class="text-7xl font-black text-green-400">0</p>
+                        <p class="text-green-500 font-medium">YES</p>
+                        <p id="yesWeight" class="text-slate-400 text-sm">0 pts</p>
+                    </div>
+                    <div class="text-center">
+                        <p id="noCount" class="text-7xl font-black text-red-400">0</p>
+                        <p class="text-red-500 font-medium">NO</p>
+                        <p id="noWeight" class="text-slate-400 text-sm">0 pts</p>
+                    </div>
+                    <div class="text-center">
+                        <p id="abstainCount" class="text-7xl font-black text-yellow-400">0</p>
+                        <p class="text-yellow-500 font-medium">ABSTAIN</p>
+                        <p id="abstainWeight" class="text-slate-400 text-sm">0 pts</p>
+                    </div>
+                </div>
+
+                <canvas id="voteChart" height="180"></canvas>
+            </div>
+        </div>
+
+        <!-- CONFIDENCE METER -->
+        <section class="glass rounded-3xl p-10 mt-8">
+            <div class="flex justify-between items-end mb-6">
+                <h3 class="text-3xl font-bold">Weighted Parliamentary Confidence</h3>
+                <div>
+                    <span id="confidenceScore" class="text-7xl font-black text-cyan-400">0</span>
+                    <span class="text-3xl text-slate-400">%</span>
+                </div>
+            </div>
+            <div class="w-full bg-slate-800 h-8 rounded-full overflow-hidden">
+                <div id="confidenceBar" 
+                     class="h-full bg-gradient-to-r from-cyan-400 to-emerald-500 transition-all duration-700"
+                     style="width: 0%"></div>
+            </div>
+            <p class="mt-4 text-slate-400">Calculated using voting intensity from all participating Members of Parliament</p>
+        </section>
+
+        <!-- VOTE LEDGER -->
+        <section class="glass rounded-3xl p-10 mt-8">
+            <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 mb-8">
+                <h3 class="text-3xl font-bold">Transparent Vote Ledger</h3>
+                <input id="searchInput" 
+                       type="text" 
+                       placeholder="Search by MP name or choice..."
+                       onkeyup="filterLedger()"
+                       class="w-full sm:w-96 bg-slate-900 border border-slate-700 focus:border-cyan-400 rounded-2xl px-6 py-4 text-sm outline-none">
+            </div>
+
+            <div id="ledger" class="space-y-4 max-h-[520px] overflow-y-auto custom-scroll pr-4">
+                <!-- JS populated -->
+            </div>
+        </section>
+    </main>
+
+    <script>
+        // ====================== DATA ======================
+        let votes = { YES: [], NO: [], ABSTAIN: [] };
+        let ledgerEntries = [];
+        let hasVoted = false;
+
+        // Voice Recognition
+        let recognition = null;
+        let isListening = false;
+
+        // ====================== CHART ======================
+        let chartInstance;
+
+        function initChart() {
+            const ctx = document.getElementById('voteChart').getContext('2d');
+            chartInstance = new Chart(ctx, {
+                type: 'doughnut',
+                data: {
+                    labels: ['YES', 'NO', 'ABSTAIN'],
+                    datasets: [{
+                        data: [0, 0, 0],
+                        backgroundColor: ['#22c55e', '#ef4444', '#eab308'],
+                        borderColor: '#0f172a',
+                        borderWidth: 6,
+                        hoverOffset: 25
+                    }]
+                },
+                options: {
+                    cutout: '68%',
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    plugins: {
+                        legend: {
+                            position: 'bottom',
+                            labels: {
+                                color: '#e2e8f0',
+                                font: { size: 16, weight: '500' },
+                                padding: 30
+                            }
+                        }
+                    }
+                }
+            });
+        }
+
+        // ====================== VOICE RECOGNITION ======================
+        function initVoiceRecognition() {
+            if (!('SpeechRecognition' in window || 'webkitSpeechRecognition' in window)) {
+                alert("Voice recognition is not supported in your browser. Please use Chrome, Edge, or another compatible browser.");
+                return null;
+            }
+
+            const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+            const recog = new SpeechRecognition();
+            
+            recog.continuous = false;
+            recog.interimResults = false;
+            recog.lang = 'en-US';
+
+            recog.onstart = () => {
+                isListening = true;
+                document.getElementById('voiceButton').classList.add('listening');
+                document.getElementById('voiceStatus').textContent = 'Listening...';
+                document.getElementById('voiceIcon').textContent = '🔴';
+                document.getElementById('voiceFeedback').textContent = 'Speak now: "Yes", "No", or "Abstain"';
+            };
+
+            recog.onend = () => {
+                isListening = false;
+                document.getElementById('voiceButton').classList.remove('listening');
+                document.getElementById('voiceStatus').textContent = 'Start Listening';
+                document.getElementById('voiceIcon').textContent = '🎤';
+                document.getElementById('voiceFeedback').textContent = '';
+            };
+
+            recog.onerror = (event) => {
+                console.error('Speech recognition error:', event);
+                document.getElementById('voiceFeedback').textContent = 'Error: ' + event.error;
+                isListening = false;
+                document.getElementById('voiceButton').classList.remove('listening');
+                document.getElementById('voiceStatus').textContent = 'Start Listening';
+                document.getElementById('voiceIcon').textContent = '🎤';
+            };
+
+            recog.onresult = (event) => {
+                const transcript = event.results[0][0].transcript.trim().toLowerCase();
+                document.getElementById('voiceFeedback').textContent = `Heard: "${transcript}"`;
+
+                let choice = null;
+
+                if (transcript.includes('yes')) {
+                    choice = 'YES';
+                } else if (transcript.includes('no')) {
+                    choice = 'NO';
+                } else if (transcript.includes('abstain') || transcript.includes('abstaining')) {
+                    choice = 'ABSTAIN';
+                }
+
+                if (choice) {
+                    setTimeout(() => {
+                        castVote(choice, true); // true = from voice
+                    }, 800);
+                } else {
+                    document.getElementById('voiceFeedback').textContent = `Could not understand. Try saying "Yes", "No", or "Abstain".`;
+                }
+            };
+
+            return recog;
+        }
+
+        function toggleVoiceRecognition() {
+            if (!recognition) {
+                recognition = initVoiceRecognition();
+                if (!recognition) return;
+            }
+
+            if (isListening) {
+                recognition.stop();
+            } else {
+                try {
+                    recognition.start();
+                } catch (e) {
+                    console.error(e);
+                    alert("Could not start voice recognition. Please try again.");
+                }
+            }
+        }
+
+        // ====================== VOTING ======================
+        function castVote(choice, fromVoice = false) {
+            if (hasVoted) {
+                if (!fromVoice) alert("You have already cast your vote in this session.");
+                return;
+            }
+
+            const intensity = parseInt(document.getElementById('intensity').value);
+
+            const vote = {
+                id: crypto.randomUUID(),
+                voter: "Hon. Gillian Jakes",
+                constituency: "Nairobi County",
+                party: "Independent",
+                choice: choice,
+                intensity: intensity,
+                timestamp: luxon.DateTime.now().toFormat('HH:mm:ss'),
+                weight: intensity,
+                method: fromVoice ? 'voice' : 'manual'
+            };
+
+            votes[choice].push(vote);
+            ledgerEntries.unshift(vote);
+            hasVoted = true;
+
+            updateDashboard();
+            addLedgerEntry(vote);
+
+            if (choice === 'YES') confettiBurst();
+
+            // Feedback for voice users
+            if (fromVoice) {
+                document.getElementById('voiceFeedback').innerHTML = 
+                    `<span class="text-emerald-400">✓ Vote cast: ${choice} (${intensity}% intensity)</span>`;
+            }
+        }
+
+        function updateDashboard() {
+            const yesC = votes.YES.length;
+            const noC = votes.NO.length;
+            const absC = votes.ABSTAIN.length;
+
+            document.getElementById('yesCount').textContent = yesC;
+            document.getElementById('noCount').textContent = noC;
+            document.getElementById('abstainCount').textContent = absC;
+
+            const yesW = votes.YES.reduce((sum, v) => sum + v.intensity, 0);
+            const noW = votes.NO.reduce((sum, v) => sum + v.intensity, 0);
+            const absW = votes.ABSTAIN.reduce((sum, v) => sum + v.intensity, 0);
+
+            document.getElementById('yesWeight').textContent = `${yesW} pts`;
+            document.getElementById('noWeight').textContent = `${noW} pts`;
+            document.getElementById('abstainWeight').textContent = `${absW} pts`;
+
+            chartInstance.data.datasets[0].data = [yesC, noC, absC];
+            chartInstance.update();
+
+            const totalDecisive = yesW + noW;
+            let confidence = totalDecisive > 0 ? Math.round((yesW / totalDecisive) * 100) : 0;
+
+            document.getElementById('confidenceScore').textContent = confidence;
+            document.getElementById('confidenceBar').style.width = `${confidence}%`;
+        }
+
+        function addLedgerEntry(vote) {
+            const ledger = document.getElementById('ledger');
+            const color = vote.choice === 'YES' ? 'emerald' : vote.choice === 'NO' ? 'red' : 'amber';
+
+            const div = document.createElement('div');
+            div.className = `ledger-entry p-6 rounded-3xl bg-slate-900 border border-${color}-500/30 flex items-center justify-between`;
+
+            div.innerHTML = `
+                <div class="flex items-center gap-5">
+                    <div class="w-14 h-14 rounded-2xl bg-${color}-500/10 flex items-center justify-center text-4xl">
+                        ${vote.choice === 'YES' ? '✅' : vote.choice === 'NO' ? '❌' : '⚖️'}
+                    </div>
+                    <div>
+                        <div class="font-bold text-xl text-${color}-400">${vote.choice}</div>
+                        <div class="text-slate-300">${vote.voter}</div>
+                        <div class="text-xs text-slate-500">${vote.constituency} • ${vote.party} ${vote.method === 'voice' ? '🎤' : ''}</div>
+                    </div>
+                </div>
+                <div class="text-right">
+                    <div class="text-4xl font-black">${vote.intensity}<span class="text-xl">%</span></div>
+                    <div class="text-sm text-slate-400">${vote.timestamp}</div>
+                </div>
+            `;
+
+            ledger.prepend(div);
+        }
+
+        // ====================== FILTER ======================
+        function filterLedger() {
+            const term = document.getElementById('searchInput').value.toLowerCase().trim();
+            const entries = document.querySelectorAll('.ledger-entry');
+
+            entries.forEach(entry => {
+                const text = entry.textContent.toLowerCase();
+                entry.style.display = text.includes(term) ? 'flex' : 'none';
+            });
+        }
+
+        // ====================== EXPORT ======================
+        function exportResults() {
+            const dataStr = JSON.stringify({
+                motion: "National Infrastructure Bill 2026",
+                date: new Date().toISOString(),
+                totalVotes: ledgerEntries.length,
+                summary: {
+                    YES: votes.YES.length,
+                    NO: votes.NO.length,
+                    ABSTAIN: votes.ABSTAIN.length
+                },
+                weighted: {
+                    YES: votes.YES.reduce((s, v) => s + v.intensity, 0),
+                    NO: votes.NO.reduce((s, v) => s + v.intensity, 0),
+                    ABSTAIN: votes.ABSTAIN.reduce((s, v) => s + v.intensity, 0)
+                },
+                allVotes: ledgerEntries
+            }, null, 2);
+
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `VoiceMeter_Results_${luxon.DateTime.now().toFormat('yyyy-MM-dd_HH-mm')}.json`;
+            a.click();
+            URL.revokeObjectURL(url);
+        }
+
+        // ====================== CONFETTI ======================
+        function confettiBurst() {
+            for (let i = 0; i < 80; i++) {
+                setTimeout(() => {
+                    const c = document.createElement('div');
+                    c.textContent = ['🟢','💚','✅','🏆'][Math.floor(Math.random()*4)];
+                    c.style.position = 'fixed';
+                    c.style.left = Math.random() * 100 + 'vw';
+                    c.style.top = '-50px';
+                    c.style.fontSize = '28px';
+                    c.style.zIndex = '9999';
+                    c.style.pointerEvents = 'none';
+                    document.body.appendChild(c);
+
+                    let posY = -50;
+                    const speed = Math.random() * 12 + 10;
+
+                    const fall = setInterval(() => {
+                        posY += speed;
+                        c.style.top = posY + 'px';
+                        c.style.transform = `rotate(${posY * 3}deg)`;
+
+                        if (posY > window.innerHeight + 50) {
+                            clearInterval(fall);
+                            c.remove();
+                        }
+                    }, 25);
+                }, i * 6);
+            }
+        }
+
+        // ====================== INITIALIZE ======================
+        window.onload = () => {
+            initChart();
+
+            // Live slider label
+            const slider = document.getElementById('intensity');
+            const label = document.getElementById('intensityLabel');
+            slider.addEventListener('input', () => {
+                label.textContent = slider.value;
+            });
+
+            // Demo votes
+            setTimeout(() => { castVote('YES'); }, 800);
+            setTimeout(() => { castVote('NO'); }, 1600);
+            setTimeout(() => { castVote('YES'); }, 2400);
+
+            // Initialize voice (but don't start it)
+            recognition = initVoiceRecognition();
+        };
+    </script>
+</body>
+</html>
